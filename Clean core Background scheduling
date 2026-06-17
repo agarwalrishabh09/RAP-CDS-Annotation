@@ -1,0 +1,406 @@
+https://community.sap.com/t5/technology-blog-posts-by-sap/how-to-do-background-scheduling-with-clean-core-including-fiori-apps/ba-p/14069752
+
+1. Setup custom Application Job Template
+- Since Public Cloud release 2502, there is interface IF_APJ_RT_RUN available. 
+This will be made available with the next full release of 2025 for private cloud and on-premise. So if you are not on public cloud, for now use 2 interfaces instead: IF_APJ_DT_EXEC_OBJECT and IF_APJ_RT_EXEC_OBJECT. 
+
+1.1 Define Job Parameters
+- define the possible parameters that could be entered by the Fiori app, or when we schedule the job via the Application Jobs Fiori app. Think of it as the selection-screen you had for the se38 report.
+
+METHOD if_apj_dt_exec_object~get_parameters.
+
+  "--------------------------------------------------------------
+  " Parameter Definitions
+  "--------------------------------------------------------------
+  et_parameter_def = VALUE #(
+
+    (
+      selname         = 'P_STORID'
+      kind            = if_apj_dt_exec_object=>parameter
+      component_type  = 'ZBOOKSTORE_ID'
+      length          = 3
+      changeable_ind  = abap_true
+      mandatory_ind   = abap_true
+    )
+
+    (
+      selname         = 'S_BOOKID'
+      kind            = if_apj_dt_exec_object=>select_option
+      component_type  = 'ZBOOK_ID'
+      length          = 6
+      changeable_ind  = abap_true
+      mandatory_ind   = abap_true
+    )
+
+    (
+      selname         = 'P_REORQT'
+      kind            = if_apj_dt_exec_object=>parameter
+      datatype        = 'I'
+      length          = 3
+      param_text      = 'Reorder Qty'
+      changeable_ind  = abap_true
+      mandatory_ind   = abap_true
+    )
+
+    (
+      selname         = 'P_SIMUL'
+      kind            = if_apj_dt_exec_object=>parameter
+      datatype        = 'C'
+      length          = 1
+      param_text      = 'Simulate Only'
+      changeable_ind  = abap_true
+      checkbox_ind    = abap_true
+    )
+
+  ).
+
+  "--------------------------------------------------------------
+  " Default Parameter Values
+  "--------------------------------------------------------------
+  et_parameter_val = VALUE #(
+
+    (
+      selname = 'P_REORQT'
+      kind    = if_apj_dt_exec_object=>parameter
+      sign    = 'I'
+      option  = 'EQ'
+      low     = '10'
+    )
+
+  ).
+
+ENDMETHOD.
+
+- The names of the parameters can be max 8 letters, just like selection-screens.
+- When not using component_type, give datatype (max 4 letters), length and label text
+- The 2nd part, returning default values. is optional
+- if you want your job parameters to offer a search help in the final Fiori app for scheduling your job, it must be done via component_type field, which points to a DDIC data element, with a DDIC search help on it. 
+
+1.2 Application Log object creation - This can simply be done in ADT, via New - Other - search for "Application Log Object".
+
+1.3 Code the job logic
+Just like in an se38 report, all the logic that the job needs to do is coded, into the 2nd, the EXECUTE method. It is highly recommended to also work with application logs, so that potential troubleshooting gets easy. The application log, when existing, is displayed in the Application Jobs Fiori app.
+
+METHOD if_apj_rt_exec_object~execute.
+
+  "------------------------------------------------------------------
+  " Declarations
+  "------------------------------------------------------------------
+  DATA: lv_simulate TYPE abap_bool,
+        lt_update   TYPE STANDARD TABLE OF any,
+        lt_create   TYPE STANDARD TABLE OF any,
+        lt_failed   TYPE STANDARD TABLE OF any,
+        lt_reported TYPE STANDARD TABLE OF any.
+
+  "------------------------------------------------------------------
+  " Execution
+  "------------------------------------------------------------------
+  TRY.
+
+      "--------------------------------------------------------------
+      " Logging Initialization
+      "--------------------------------------------------------------
+      IF sy-batch = abap_true.
+
+        go_log = cl_bali_log=>create_with_header(
+          header = cl_bali_header_setter=>create(
+            object    = 'Z_OBJECT'
+            subobject = 'Z_SUBOBJECT'
+          )
+        ).
+
+        add_text_to_log( 'Job started (Background)' ).
+
+      ELSE.
+
+        add_text_to_log( 'Job started (Foreground)' ).
+
+      ENDIF.
+
+      "--------------------------------------------------------------
+      " Read Input Parameters
+      "--------------------------------------------------------------
+      LOOP AT it_parameters INTO DATA(ls_param).
+
+        CASE ls_param-selname.
+
+          WHEN 'P_SIMUL'.
+            lv_simulate = xsdbool( ls_param-low = abap_true ).
+
+          WHEN OTHERS.
+            " Handle other parameters
+
+        ENDCASE.
+
+      ENDLOOP.
+
+      "--------------------------------------------------------------
+      " Core Processing (Suppressed)
+      "--------------------------------------------------------------
+      add_text_to_log( 'Processing started...' ).
+
+      " 👉 Your business logic here:
+      " - Select data
+      " - Prepare lt_update / lt_create
+
+      add_text_to_log( 'Processing completed.' ).
+
+      "--------------------------------------------------------------
+      " Simulation vs Actual Execution
+      "--------------------------------------------------------------
+      IF lv_simulate = abap_true.
+
+        add_text_to_log( 'SIMULATION MODE - No DB changes' ).
+
+      ELSE.
+
+        "---------------------- UPDATE ------------------------------
+        IF lt_update IS NOT INITIAL.
+
+          add_text_to_log( 'Updating records...' ).
+
+          MODIFY ENTITIES OF zr_business_object
+            ENTITY entity_name
+            UPDATE FIELDS ( field_list )
+            WITH lt_update
+            REPORTED DATA(DATA(update_reported))
+            FAILED   DATA(DATA(update_failed)).
+
+          IF update_failed IS INITIAL.
+
+            COMMIT ENTITIES RESPONSE OF zr_business_object
+              REPORTED DATA(DATA(commit_reported1))
+              FAILED   DATA(DATA(commit_failed1)).
+
+            lt_reported = CORRESPONDING #( commit_reported1 ).
+            lt_failed   = CORRESPONDING #( commit_failed1 ).
+
+          ELSE.
+
+            lt_reported = CORRESPONDING #( update_reported ).
+            lt_failed   = CORRESPONDING #( update_failed ).
+
+          ENDIF.
+
+        ENDIF.
+
+        "---------------------- CREATE ------------------------------
+        IF lt_create IS NOT INITIAL.
+
+          add_text_to_log( 'Creating records...' ).
+
+          MODIFY ENTITIES OF zr_business_object
+            ENTITY entity_name
+            CREATE
+            FIELDS ( field_list )
+            AUTO FILL CID WITH lt_create
+            REPORTED DATA(DATA(create_reported))
+            FAILED   DATA(DATA(create_failed)).
+
+          IF create_failed IS INITIAL.
+
+            COMMIT ENTITIES RESPONSE OF zr_business_object
+              REPORTED DATA(DATA(commit_reported2))
+              FAILED   DATA(DATA(commit_failed2)).
+
+            lt_reported = CORRESPONDING #( commit_reported2 ).
+            lt_failed   = CORRESPONDING #( commit_failed2 ).
+
+          ELSE.
+
+            lt_reported = CORRESPONDING #( create_reported ).
+            lt_failed   = CORRESPONDING #( create_failed ).
+
+          ENDIF.
+
+        ENDIF.
+
+      ENDIF.
+
+      "--------------------------------------------------------------
+      " Result Handling
+      "--------------------------------------------------------------
+      IF lt_failed IS INITIAL.
+
+        add_text_to_log( 'Execution successful' ).
+
+      ELSE.
+
+        LOOP AT lt_failed INTO DATA(ls_failed).
+
+          add_text_to_log( |Error occurred: { ls_failed }| ).
+
+        ENDLOOP.
+
+      ENDIF.
+
+      add_text_to_log( 'Job finished' ).
+
+    "--------------------------------------------------------------
+    " Exception Handling
+    "--------------------------------------------------------------
+    CATCH cx_bali_runtime INTO DATA(lx_bali).
+
+      add_text_to_log( lx_bali->get_text( ) ).
+
+      RAISE EXCEPTION TYPE cx_apj_rt_content
+        EXPORTING
+          previous = lx_bali.
+
+  ENDTRY.
+
+ENDMETHOD.
+
+METHOD add_text_to_log.
+
+  "------------------------------------------------------------------
+  " Logging: Background vs Foreground
+  "------------------------------------------------------------------
+  IF sy-batch = abap_true.
+
+    "--------------------------------------------------------------
+    " Background Mode (Application Log - BAL)
+    "--------------------------------------------------------------
+
+    DATA(lo_log_text) =
+      cl_bali_free_text_setter=>create(
+        severity = if_bali_constants=>c_severity_status
+        text     = i_text
+      ).
+
+    lo_log_text->set_detail_level(
+      detail_level = '1'
+    ).
+
+    " Add entry to BAL log
+    go_log->add_item(
+      item = lo_log_text
+    ).
+
+    " Persist log
+    cl_bali_log_db=>get_instance( )->save_log(
+      log                         = go_log
+      assign_to_current_appl_job  = abap_true
+    ).
+
+  ELSE.
+
+    "--------------------------------------------------------------
+    " Foreground Mode (Internal Table Log)
+    "--------------------------------------------------------------
+
+    gs_fglog-no   += 1.
+    gs_fglog-text  = i_text.
+
+    APPEND gs_fglog TO gt_fglog.
+
+  ENDIF.
+
+ENDMETHOD.
+
+
+1.4 Application job catalog entry and template
+Creating the APJ class is a must, before we can create the actual Application Job Template. And the job template requires a Job Catalog Entry. All is again done in ADT. Via File - New - Other - and then search for "application job":
+-  start with Application Job Catalog Entry. Here we must now enter the ABAP class, which has the EXECUTE method. 
+- The 2nd step is the Application Job Template, which then can be used in Fiori app Application Jobs. As before, in ADT choose New - File - Other and this time choose "Application Job Template". Here now we give the Application Job Catalog Entry we just created, and that's it. If you like, you can default parameter values here. This is only taken into account if you create a new "job" via Application Jobs Fiori app, where these parameters are then suggested as default, but can be changed. If we schedule the background run programmatically, no parameters are set by default.
+
+
+2. Scheduling/Running job in background
+METHOD save_modified.
+
+  "------------------------------------------------------------------
+  " Declarations
+  "------------------------------------------------------------------
+  DATA:
+    lv_job_template_name TYPE cl_apj_rt_api=>ty_template_name
+      VALUE 'ZBOOK_APJ_TEMPL',
+    ls_job_parameter     TYPE cl_apj_rt_api=>ty_job_parameter_value,
+    ls_value_range       TYPE cl_apj_rt_api=>ty_value_range,
+    ls_job_start_info    TYPE cl_apj_rt_api=>ty_start_info,
+    lv_job_name          TYPE cl_apj_rt_api=>ty_jobname,
+    lv_job_count         TYPE cl_apj_rt_api=>ty_jobcount.
+
+  "------------------------------------------------------------------
+  " Validate Input Parameters
+  "------------------------------------------------------------------
+  CHECK zbp_r_bookstorestocktp=>gt_job_parameters IS NOT INITIAL.
+
+  " Get bookstore ID from parameters
+  ls_job_parameter-name = zcl_apj_test=>gc_para_store.
+
+  READ TABLE zbp_r_bookstorestocktp=>gt_job_parameters
+    FROM ls_job_parameter
+    USING KEY name
+    INTO ls_job_parameter.
+
+  CHECK sy-subrc = 0.
+
+  READ TABLE ls_job_parameter-t_value
+    INDEX 1
+    INTO ls_value_range.
+
+  CHECK sy-subrc = 0.
+
+  "------------------------------------------------------------------
+  " Schedule Background Job
+  "------------------------------------------------------------------
+  TRY.
+
+      ls_job_start_info-start_immediately = abap_true.
+
+      "--------------------------------------------------------------
+      " Schedule Job
+      "--------------------------------------------------------------
+      cl_apj_rt_api=>schedule_job(
+        EXPORTING
+          iv_job_template_name   = lv_job_template_name
+          iv_job_text            = |Restocking bookstore { ls_value_range-low }|
+          is_start_info          = ls_job_start_info
+          it_job_parameter_value = zbp_r_bookstorestocktp=>gt_job_parameters
+        IMPORTING
+          ev_jobname             = lv_job_name
+          ev_jobcount            = lv_job_count
+      ).
+
+      "--------------------------------------------------------------
+      " Success Message
+      "--------------------------------------------------------------
+      APPEND VALUE #(
+        %msg = new_message_with_text(
+          severity = ms-success
+          text     = |Reorder job scheduled (job name: { lv_job_name })|
+        )
+      ) TO reported-bookstorestock.
+
+    "--------------------------------------------------------------
+    " Exception: APJ Runtime
+    "--------------------------------------------------------------
+    CATCH cx_apj_rt INTO DATA(lx_job_scheduling_error).
+
+      APPEND VALUE #(
+        %msg = new_message(
+                 id       = 'ZBOOKSTORE'
+                 number   = '000'
+                 severity = ms-error
+                 v1       = lx_job_scheduling_error->get_longtext( )
+                 v2       = lx_job_scheduling_error->bapimsg-message
+               )
+      ) TO reported-bookstorestock.
+
+    "--------------------------------------------------------------
+    " Exception: Generic
+    "--------------------------------------------------------------
+    CATCH cx_root INTO DATA(lx_root_exception).
+
+      APPEND VALUE #(
+        %msg = new_message(
+                 id       = 'ZBOOKSTORE'
+                 number   = '001'
+                 severity = if_abap_behv_message=>severity-error
+                 v1       = lx_root_exception->get_longtext( )
+               )
+      ) TO reported-bookstorestock.
+
+  ENDTRY.
+
+ENDMETHOD.
