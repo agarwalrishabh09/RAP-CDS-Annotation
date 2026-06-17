@@ -1,0 +1,7 @@
+Here is what actually differs between the two:
+
+✅ V4 separates Actions (write) from Functions (read) at the protocol level. V2 had no such distinction. 
+✅ V4 supports lambda operators in $filter - query across child collections natively. V2 could not do this. 
+✅ V4 has delta tokens for change tracking. V2 had no standard equivalent.
+✅ V4's nested $expand lets you filter, sort, and paginate within an expansion. V2 returned the full related collection with no control. 
+✅ V2 still dominates integration landscapes, and for a concrete reason - the tooling was built around it.
