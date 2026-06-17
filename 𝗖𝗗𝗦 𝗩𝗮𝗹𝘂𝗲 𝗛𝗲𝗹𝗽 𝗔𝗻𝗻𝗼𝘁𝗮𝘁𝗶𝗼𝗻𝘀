@@ -1,0 +1,22 @@
+Showing the latest entries first in the value help. Loading data only when the user clicks Go, instead of fetching everything when the dialog opens.
+
+Both can be achieved with a few annotations:
+@𝗖𝗼𝗻𝘀𝘂𝗺𝗽𝘁𝗶𝗼𝗻.𝘃𝗮𝗹𝘂𝗲𝗛𝗲𝗹𝗽𝗗𝗲𝗳𝗮𝘂𝗹𝘁.𝗳𝗲𝘁𝗰𝗵𝗩𝗮𝗹𝘂𝗲𝘀
+ • #ON_EXPLICIT_REQUEST loads data only when the user clicks Go (default in OData V2).
+ • #AUTOMATICALLY_WHEN_DISPLAYED fetches data automatically when the value help dialog is opened (default in OData V4).
+
+@𝗨𝗜.𝗽𝗿𝗲𝘀𝗲𝗻𝘁𝗮𝘁𝗶𝗼𝗻𝗩𝗮𝗿𝗶𝗮𝗻𝘁
+ • Defines the default sorting behavior for the value help results.
+ • In this example, entries are sorted in descending order based on FieldFromCDS.
+
+@Consumption.valueHelpDefault.fetchValues: #ON_EXPLICIT_REQUEST
+@UI.presentationVariant: [{
+    sortOrder: [{
+        by: 'FieldFromCDS',
+        direction: #DESC
+    }]
+}]
+define view entity ValueHelpCDS
+{
+    ...
+}
