@@ -1,4 +1,5 @@
 https://bharathi1294.github.io/bharathi-sakthivel.github.io/posts/rap-multi-input-field/
+https://ui5.sap.com/#/topic/04ff5b1a81344a8e8169ea99630ff4e5
 
 Have you ever encountered a scenario in RAP where you need to handle multiple inputs? It’s possible to implement a multi-input field that allows you to create and delete values in a composition child.
 
@@ -10,3 +11,4 @@ For instance, consider _EmployeeAddress as the composition child (CRUD enabled i
 }]
 element;
 This renders a multi-input field in the Fiori UI where users can add or remove child entries inline.
+
