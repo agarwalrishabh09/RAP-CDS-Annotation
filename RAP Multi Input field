@@ -1,0 +1,12 @@
+https://bharathi1294.github.io/bharathi-sakthivel.github.io/posts/rap-multi-input-field/
+
+Have you ever encountered a scenario in RAP where you need to handle multiple inputs? It’s possible to implement a multi-input field that allows you to create and delete values in a composition child.
+
+For instance, consider _EmployeeAddress as the composition child (CRUD enabled in BDEF). You can directly assign _EmployeeAddress.Address to the value parameter of the Line Item, Identification, or Field Group annotation.
+
+@UI.lineItem: [{
+  position: 10,
+  value: '_EmployeeAddress.Address'
+}]
+element;
+This renders a multi-input field in the Fiori UI where users can add or remove child entries inline.
